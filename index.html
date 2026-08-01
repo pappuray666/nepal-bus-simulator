@@ -4,52 +4,22 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Nepal Highway 3D Bus Simulator</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-    body { background: #0f172a; color: #fff; overflow: hidden; display: flex; flex-direction: column; align-items: center; }
-    #canvas-container { position: relative; width: 100vw; height: 75vh; }
-    canvas { width: 100%; height: 100%; display: block; }
-    
-    #hud {
-      position: absolute; top: 15px; left: 15px;
-      background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px);
-      padding: 15px 20px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);
-      font-size: 14px; line-height: 1.6; box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-    }
-    
-    #controls-bar {
-      width: 100vw; height: 25vh; background: #1e293b;
-      display: flex; justify-content: space-around; align-items: center; padding: 15px;
-      border-top: 2px solid #334155;
-    }
-    
-    .panel-card {
-      background: #0f172a; padding: 15px; border-radius: 10px; border: 1px solid #334155;
-      display: flex; flex-direction: column; gap: 8px;
-    }
-
-    button {
-      background: #ef4444; color: white; border: none; padding: 10px 16px;
-      cursor: pointer; border-radius: 6px; font-weight: bold; transition: 0.2s;
-    }
-    button:hover { background: #dc2626; transform: translateY(-1px); }
-    select { padding: 8px; border-radius: 6px; background: #334155; color: white; border: none; }
-    .status-badge { padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; }
-  </style>
-  <!-- Three.js Library -->
+  <link rel="stylesheet" href="style.css">
+  <!-- Three.js CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
 
-  <div id="canvas-container">
+  <div id="game-container">
     <div id="hud">
       <h3 style="color:#f87171; margin-bottom:5px;">🇳🇵 Nepal Bus Simulator 3D</h3>
       <div><b>Route:</b> <span id="route-txt">Kathmandu ➔ Pokhara</span></div>
-      <div><b>Current Location:</b> <span id="city-txt">Kathmandu Terminal</span></div>
+      <div><b>Current Location:</b> <span id="city-txt">Kathmandu Bus Park</span></div>
       <div><b>Cash:</b> NPR <span id="money-txt" style="color:#4ade80;">1500</span></div>
       <div><b>Passengers:</b> <span id="passengers-txt">0</span> / 32</div>
-      <div><b>Door Status:</b> <span id="door-txt" class="status-badge" style="background:#ef4444;">CLOSED</span></div>
+      <div><b>Door Status:</b> <span id="door-txt" class="status-badge closed">CLOSED</span></div>
       <div><b>Fuel:</b> <span id="fuel-txt">100</span>%</div>
+      <div><b>Speed:</b> <span id="speed-txt">0</span> km/h</div>
     </div>
   </div>
 
@@ -57,228 +27,21 @@
     <div class="panel-card">
       <h4>Highway Navigation</h4>
       <select id="route-select">
-        <option value="Pokhara">Kathmandu ➔ Pokhara (Prithvi Highway)</option>
-        <option value="Hetauda">Kathmandu ➔ Hetauda (Tribhuvan Rajpath)</option>
-        <option value="Janakpur">Hetauda ➔ Janakpur (Mahendra Highway)</option>
+        <option value="Pokhara">Kathmandu ➔ Pokhara (Prithvi Hwy)</option>
+        <option value="Hetauda">Kathmandu ➔ Hetauda (Tribhuvan Hwy)</option>
+        <option value="Janakpur">Hetauda ➔ Janakpur (Mahendra Hwy)</option>
         <option value="Malangwa">Janakpur ➔ Malangwa (Terai Route)</option>
       </select>
-      <button onclick="boardPassengers()">Board Passengers at Station</button>
+      <button id="board-btn">Board Passengers at Station</button>
     </div>
 
     <div class="panel-card">
-      <h4>Bus Door & Interaction</h4>
-      <button onclick="toggleDoor()">Open/Close Passenger Doors (Space)</button>
+      <h4>Bus Operations</h4>
+      <button id="door-btn">Open/Close Passenger Doors (Space)</button>
       <small style="color:#94a3b8;">Controls: [W/A/S/D] or Arrow Keys to Drive</small>
     </div>
   </div>
 
-  <script>
-    // --- 1. THREE.JS SCENE SETUP ---
-    const container = document.getElementById('canvas-container');
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87ceeb); // Nepalese Clear Blue Sky
-    scene.fog = new THREE.FogExp2(0x87ceeb, 0.005); // Mountain valley fog
-
-    const camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(container.clientWidth, container.clientHeight);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    container.appendChild(renderer.domElement);
-
-    // --- 2. LIGHTING ---
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-    scene.add(ambientLight);
-
-    const sunLight = new THREE.DirectionalLight(0xfffaed, 0.8);
-    sunLight.position.set(100, 150, 50);
-    sunLight.castShadow = true;
-    sunLight.shadow.mapSize.width = 2048;
-    sunLight.shadow.mapSize.height = 2048;
-    scene.add(sunLight);
-
-    // --- 3. TERRAIN & ENVIRONMENT (NEPAL MOUNTAINS) ---
-    // Mountain Floor
-    const terrainGeo = new THREE.PlaneGeometry(800, 800, 64, 64);
-    terrainGeo.rotateX(-Math.PI / 2);
-    
-    // Deform vertices to create valley elevation
-    const pos = terrainGeo.attributes.position;
-    for (let i = 0; i < pos.count; i++) {
-      let x = pos.getX(i);
-      let z = pos.getZ(i);
-      // Valley carving along z-axis
-      let distFromRoad = Math.abs(x);
-      if (distFromRoad > 30) {
-        pos.setY(i, Math.sin(x * 0.02) * 20 + Math.cos(z * 0.02) * 20 + (distFromRoad - 30) * 0.3);
-      }
-    }
-    terrainGeo.computeVertexNormals();
-    const terrainMat = new THREE.MeshLambertMaterial({ color: 0x2d5a27 }); // Lush Green Hills
-    const terrain = new THREE.Mesh(terrainGeo, terrainMat);
-    terrain.receiveShadow = true;
-    scene.add(terrain);
-
-    // Asphalt Road (Prithvi Highway section)
-    const roadGeo = new THREE.PlaneGeometry(20, 800);
-    roadGeo.rotateX(-Math.PI / 2);
-    const roadMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.8 });
-    const road = new THREE.Mesh(roadGeo, roadMat);
-    road.position.y = 0.1;
-    road.receiveShadow = true;
-    scene.add(road);
-
-    // Instanced Pine Trees on Mountain Slopes
-    const treeGeo = new THREE.ConeGeometry(2, 8, 5);
-    const treeMat = new THREE.MeshLambertMaterial({ color: 0x14452f });
-    const treeCount = 300;
-    const treeMesh = new THREE.InstancedMesh(treeGeo, treeMat, treeCount);
-    const dummy = new THREE.Object3D();
-
-    for (let i = 0; i < treeCount; i++) {
-      let side = Math.random() > 0.5 ? 1 : -1;
-      let x = (Math.random() * 200 + 35) * side;
-      let z = (Math.random() - 0.5) * 700;
-      let y = Math.sin(x * 0.02) * 20 + Math.cos(z * 0.02) * 20 + (Math.abs(x) - 30) * 0.3;
-      dummy.position.set(x, y + 4, z);
-      dummy.scale.set(1 + Math.random(), 1 + Math.random()*1.5, 1 + Math.random());
-      dummy.updateMatrix();
-      treeMesh.setMatrixAt(i, dummy.matrix);
-    }
-    scene.add(treeMesh);
-
-    // --- 4. BUS MODEL BUILD (3D DELUXE BUS) ---
-    const busGroup = new THREE.Group();
-
-    // Body
-    const bodyGeo = new THREE.BoxGeometry(3.2, 3.5, 10);
-    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.3 }); // Red/Orange Express
-    const busBody = new THREE.Mesh(bodyGeo, bodyMat);
-    busBody.position.y = 2.2;
-    busBody.castShadow = true;
-    busGroup.add(busBody);
-
-    // Roof Luggage Carrier
-    const rackGeo = new THREE.BoxGeometry(2.8, 0.4, 6);
-    const rackMat = new THREE.MeshStandardMaterial({ color: 0x1e293b });
-    const rack = new THREE.Mesh(rackGeo, rackMat);
-    rack.position.set(0, 4.1, -1);
-    busGroup.add(rack);
-
-    // Headlights
-    const lightGeo = new THREE.BoxGeometry(0.6, 0.3, 0.2);
-    const lightMat = new THREE.MeshBasicMaterial({ color: 0xffffaa });
-    const leftLight = new THREE.Mesh(lightGeo, lightMat);
-    leftLight.position.set(-1.1, 1.2, 5.01);
-    const rightLight = leftLight.clone();
-    rightLight.position.x = 1.1;
-    busGroup.add(leftLight, rightLight);
-
-    scene.add(busGroup);
-
-    // --- 5. VEHICLE PHYSICS & GAME LOGIC ---
-    let money = 1500;
-    let passengers = 0;
-    const maxPassengers = 32;
-    let doorOpen = false;
-    let fuel = 100;
-
-    const vehicle = {
-      speed: 0,
-      maxSpeed: 0.8,
-      accel: 0.015,
-      friction: 0.008,
-      steering: 0,
-      angle: 0
-    };
-
-    const keys = {};
-    window.addEventListener('keydown', e => {
-      keys[e.key.toLowerCase()] = true;
-      if (e.code === 'Space') toggleDoor();
-    });
-    window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
-
-    function toggleDoor() {
-      if (Math.abs(vehicle.speed) < 0.01) {
-        doorOpen = !doorOpen;
-        const badge = document.getElementById('door-txt');
-        badge.innerText = doorOpen ? "OPEN" : "CLOSED";
-        badge.style.background = doorOpen ? "#22c55e" : "#ef4444";
-      }
-    }
-
-    function boardPassengers() {
-      if (!doorOpen) {
-        alert("Stop the bus and open the passenger doors first!");
-        return;
-      }
-      if (passengers >= maxPassengers) {
-        alert("Bus is full!");
-        return;
-      }
-      let added = Math.floor(Math.random() * 8) + 4;
-      passengers = Math.min(maxPassengers, passengers + added);
-      money += added * 350; // Fare calculation
-      updateHUD();
-    }
-
-    function updateHUD() {
-      document.getElementById('money-txt').innerText = money;
-      document.getElementById('passengers-txt').innerText = passengers;
-      document.getElementById('fuel-txt').innerText = Math.round(fuel);
-    }
-
-    // --- 6. ANIMATION & CAMERA LOOP ---
-    function animate() {
-      requestAnimationFrame(animate);
-
-      // Driving Mechanics (Only move when door is closed)
-      if (!doorOpen && fuel > 0) {
-        if (keys['w'] || keys['arrowup']) vehicle.speed = Math.min(vehicle.maxSpeed, vehicle.speed + vehicle.accel);
-        if (keys['s'] || keys['arrowdown']) vehicle.speed = Math.max(-vehicle.maxSpeed/2, vehicle.speed - vehicle.accel);
-        
-        if (keys['a'] || keys['arrowleft']) vehicle.angle += 0.02 * (vehicle.speed / vehicle.maxSpeed);
-        if (keys['d'] || keys['arrowright']) vehicle.angle -= 0.02 * (vehicle.speed / vehicle.maxSpeed);
-      }
-
-      // Apply Friction
-      if (vehicle.speed > 0) vehicle.speed = Math.max(0, vehicle.speed - vehicle.friction);
-      if (vehicle.speed < 0) vehicle.speed = Math.min(0, vehicle.speed + vehicle.friction);
-
-      // Apply Position
-      busGroup.rotation.y = vehicle.angle;
-      busGroup.position.x += Math.sin(vehicle.angle) * vehicle.speed;
-      busGroup.position.z += Math.cos(vehicle.angle) * vehicle.speed;
-
-      // Fuel usage
-      if (Math.abs(vehicle.speed) > 0) {
-        fuel -= 0.005;
-        updateHUD();
-      }
-
-      // Smooth Third-Person Chase Camera
-      const cameraOffset = new THREE.Vector3(
-        -Math.sin(vehicle.angle) * 18,
-        8,
-        -Math.cos(vehicle.angle) * 18
-      );
-      camera.position.x = busGroup.position.x + cameraOffset.x;
-      camera.position.y = busGroup.position.y + cameraOffset.y;
-      camera.position.z = busGroup.position.z + cameraOffset.z;
-      camera.lookAt(busGroup.position.x, busGroup.position.y + 2, busGroup.position.z);
-
-      renderer.render(scene, camera);
-    }
-
-    animate();
-
-    // Window Resize Handler
-    window.addEventListener('resize', () => {
-      camera.aspect = container.clientWidth / container.clientHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(container.clientWidth, container.clientHeight);
-    });
-  </script>
+<script src="game.js?v=2.0"></script>
 </body>
 </html>
