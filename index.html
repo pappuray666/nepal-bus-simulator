@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nepal Highway Bus Simulator</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: Arial, sans-serif; }
+    body { background: #111; color: #fff; overflow: hidden; display: flex; flex-direction: column; align-items: center; }
+    #game-container { position: relative; width: 800px; height: 500px; background: #222; margin-top: 10px; border: 3px solid #444; }
+    canvas { background: #3a5a40; display: block; }
+    #hud { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px; font-size: 14px; }
+    #controls { position: absolute; bottom: 10px; right: 10px; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px; }
+    button { background: #e63946; color: white; border: none; padding: 8px 12px; margin: 2px; cursor: pointer; border-radius: 4px; font-weight: bold; }
+    button:hover { background: #d62828; }
+    #route-panel { margin-top: 10px; background: #222; padding: 10px; border-radius: 5px; width: 800px; display: flex; justify-content: space-between; align-items: center; }
+  </style>
+</head>
+<body>
+
+  <h2 style="margin-top:10px;">🇳🇵 Nepal Bus Simulator (Kathmandu - Pokhara - Janakpur)</h2>
+
+  <div id="game-container">
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+    <div id="hud">
+      <div><b>Current City:</b> <span id="city-txt">Kathmandu Bus Park</span></div>
+      <div><b>Money:</b> Rs. <span id="money-txt">1500</span></div>
+      <div><b>Passengers:</b> <span id="passengers-txt">0</span> / 30</div>
+      <div><b>Door Status:</b> <span id="door-txt" style="color:red;">CLOSED</span></div>
+      <div><b>Fuel:</b> <span id="fuel-txt">100</span>%</div>
+    </div>
+    <div id="controls">
+      <p><b>Controls:</b> Arrow Keys / WASD to Drive</p>
+      <button onclick="toggleDoor()">Open/Close Door (Space)</button>
+    </div>
+  </div>
+
+  <div id="route-panel">
+    <div>
+      <label><b>Select Route:</b></label>
+      <select id="destination-select" style="padding:5px;">
+        <option value="Pokhara">Kathmandu ➔ Pokhara (Prithvi Hwy)</option>
+        <option value="Hetauda">Kathmandu ➔ Hetauda (Tribhuvan Hwy)</option>
+        <option value="Janakpur">Hetauda ➔ Janakpur (Terai Hwy)</option>
+        <option value="Malangwa">Janakpur ➔ Malangwa (Local)</option>
+      </select>
+    </div>
+    <button onclick="boardPassengers()">Board Passengers at Station</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Game Variables
+    let money = 1500;
+    let passengers = 0;
+    const maxPassengers = 30;
+    let doorOpen = false;
+    let fuel = 100;
+    let currentCity = "Kathmandu";
+
+    // Bus Physics State
+    const bus = {
+      x: 400,
+      y: 400,
+      width: 30,
+      height: 60,
+      angle: 0,
+      speed: 0,
+      maxSpeed: 4,
+      accel: 0.1,
+      friction: 0.03
+    };
+
+    const keys = {};
+
+    window.addEventListener('keydown', e => {
+      keys[e.key] = true;
+      if(e.code === 'Space') toggleDoor();
+    });
+    window.addEventListener('keyup', e => keys[e.key] = false);
+
+    function toggleDoor() {
+      if(bus.speed === 0) {
+        doorOpen = !doorOpen;
+        document.getElementById('door-txt').innerText = doorOpen ? "OPEN" : "CLOSED";
+        document.getElementById('door-txt').style.color = doorOpen ? "green" : "red";
+      }
+    }
+
+    function boardPassengers() {
+      if(!doorOpen) {
+        alert("Please stop the bus and OPEN the door first!");
+        return;
+      }
+      if(passengers >= maxPassengers) {
+        alert("Bus is fully loaded!");
+        return;
+      }
+      let newPass = Math.floor(Math.random() * 10) + 5;
+      passengers = Math.min(maxPassengers, passengers + newPass);
+      money += newPass * 250; // Ticket earnings per passenger
+      updateHUD();
+    }
+
+    function updateHUD() {
+      document.getElementById('money-txt').innerText = money;
+      document.getElementById('passengers-txt').innerText = passengers;
+      document.getElementById('fuel-txt').innerText = Math.round(fuel);
+      document.getElementById('city-txt').innerText = currentCity;
+    }
+
+    function update() {
+      // Driving Controls (Only drive if doors are closed)
+      if(!doorOpen && fuel > 0) {
+        if(keys['ArrowUp'] || keys['w']) bus.speed = Math.min(bus.maxSpeed, bus.speed + bus.accel);
+        if(keys['ArrowDown'] || keys['s']) bus.speed = Math.max(-bus.maxSpeed/2, bus.speed - bus.accel);
+        if(keys['ArrowLeft'] || keys['a']) bus.angle -= 0.04 * (bus.speed / bus.maxSpeed);
+        if(keys['ArrowRight'] || keys['d']) bus.angle += 0.04 * (bus.speed / bus.maxSpeed);
+      }
+
+      // Apply Friction
+      if (bus.speed > 0) bus.speed = Math.max(0, bus.speed - bus.friction);
+      if (bus.speed < 0) bus.speed = Math.min(0, bus.speed + bus.friction);
+
+      // Movement
+      bus.x += Math.sin(bus.angle) * bus.speed;
+      bus.y -= Math.cos(bus.angle) * bus.speed;
+
+      // Fuel consumption
+      if(Math.abs(bus.speed) > 0) {
+        fuel -= 0.01;
+        updateHUD();
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw Road (Prithvi/Tribhuvan Highway Bend)
+      ctx.strokeStyle = "#555";
+      ctx.lineWidth = 80;
+      ctx.beginPath();
+      ctx.moveTo(100, 500);
+      ctx.bezierCurveTo(100, 200, 700, 300, 700, 0);
+      ctx.stroke();
+
+      // Draw Bus Stop / Bus Park Zone
+      ctx.fillStyle = "rgba(255, 215, 0, 0.4)";
+      ctx.fillRect(320, 350, 160, 100);
+      ctx.fillStyle = "#fff";
+      ctx.font = "12px Arial";
+      ctx.fillText("BUS PARK (Stop Here)", 330, 400);
+
+      // Draw Bus
+      ctx.save();
+      ctx.translate(bus.x, bus.y);
+      ctx.rotate(bus.angle);
+
+      // Bus Body (Red Nepalese Deluxe Bus)
+      ctx.fillStyle = "#d62828";
+      ctx.fillRect(-bus.width/2, -bus.height/2, bus.width, bus.height);
+
+      // Bus Windshield
+      ctx.fillStyle = "#a8dede";
+      ctx.fillRect(-bus.width/2 + 2, -bus.height/2 + 2, bus.width - 4, 12);
+
+      // Bus Headlights
+      ctx.fillStyle = "#ffff33";
+      ctx.fillRect(-bus.width/2 + 2, -bus.height/2 - 2, 6, 4);
+      ctx.fillRect(bus.width/2 - 8, -bus.height/2 - 2, 6, 4);
+
+      ctx.restore();
+    }
+
+    function gameLoop() {
+      update();
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+
+    gameLoop();
+  </script>
+</body>
+</html>
